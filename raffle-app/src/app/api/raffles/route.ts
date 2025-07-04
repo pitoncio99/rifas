@@ -1,3 +1,4 @@
+// File: src/app/api/raffles/route.ts
 import { NextResponse } from "next/server";
 import { dbPromise } from "../../../lib/mongodb";
 import { v4 as uuidv4 } from "uuid";
@@ -10,6 +11,7 @@ interface RaffleDoc {
   slogan: string;
   prize: string;
   price: number;
+  date: Date;       // ← nueva fecha de sorteo
   createdAt: Date;
 }
 
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { title, slogan, prize, price } = await request.json();
+  const { title, slogan, prize, price, date } = await request.json();
   const db = await dbPromise;
   const col = db.collection<RaffleDoc>("raffles");
 
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
     slogan,
     prize,
     price,
+    date: new Date(date),    // ← guardamos la fecha
     createdAt: new Date(),
   };
 
