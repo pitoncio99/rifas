@@ -1,4 +1,7 @@
+// File: src/app/page.tsx
 "use client";
+
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -13,12 +16,16 @@ export default function HomePage() {
     const trimmed = input.trim();
     if (!trimmed) return;
 
-    // Intentamos verificar que la rifa exista antes de redirigir
+    // Verificamos existencia de la rifa antes de redirigir
     let res: Response;
     if (/^R\d+$/i.test(trimmed)) {
-      res = await fetch(`/api/raffles?code=${encodeURIComponent(trimmed.toUpperCase())}`);
+      res = await fetch(
+        `/api/raffles?code=${encodeURIComponent(trimmed.toUpperCase())}`
+      );
     } else {
-      res = await fetch(`/api/raffles/${encodeURIComponent(trimmed)}`);
+      res = await fetch(
+        `/api/raffles/${encodeURIComponent(trimmed)}`
+      );
     }
 
     if (res.status === 404) {
@@ -30,15 +37,25 @@ export default function HomePage() {
       return;
     }
 
-    // Redirige a /raffles/[id] (el param puede ser R1 o el UUID)
-    router.push(`/raffles/${trimmed}`);
+    // Redirige a /raffles/[id]
+    router.push(`/raffles/${encodeURIComponent(trimmed)}`);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 px-4">
+      {/* Botón para ir al login */}
+      <div className="w-full max-w-sm flex justify-end mb-6">
+        <Link href="/auth/login">
+          <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+            Iniciar sesión
+          </button>
+        </Link>
+      </div>
+
+      {/* Formulario de búsqueda */}
       <form
         onSubmit={handleSearch}
-        className="bg-white p-8 rounded-2xl shadow-lg max-w-sm w-full"
+        className="w-full max-w-sm bg-white p-8 rounded-2xl shadow-lg"
       >
         <h1 className="text-2xl font-bold text-gray-900 mb-4 text-center">
           Buscar rifa

@@ -1,102 +1,124 @@
 // File: src/app/api/raffles/[id]/tickets/route.ts
-import { NextResponse } from "next/server";
-import { dbPromise } from "@/lib/mongodb";
-import type { ObjectId } from "mongodb";
 
-interface RaffleRaw {
-  _id: string | ObjectId;
-  code: string;
+import { NextResponse } from "next/server";
+import { dbPromise }    from "@/lib/mongodb";
+import crypto           from "crypto";
+
+interface RaffleDoc {
+  _id:       string;
+  code:      string;
+  title:     string;
+  slogan:    string;
+  prize:     string;
+  price:     number;
+  date?:     string;
+  createdAt: Date;
+  createdBy: string;
 }
 
 interface TicketDoc {
-  _id: string;
-  raffleId: string;
-  number: string;
-  status: "disponible" | "ocupado";
-  pago: boolean;
-  buyer: string;
+  _id:           string;
+  raffleId:      string;
+  number:        string;
+  status:        "disponible" | "ocupado";
+  pago:          boolean;
+  buyer:         string;
   paymentMethod: string;
-  updatedAt: Date;
+  updatedAt:     string;
 }
 
-type Context = {
-  params: Promise<{ id: string }>;
-};
+// params viene como Promise<{ id: string }>
+type Context = { params: Promise<{ id: string }> };
 
-export async function GET(
-  _request: Request,
-  context: Context
-) {
-  // ¡Await aquí!
+/**
+ * GET /api/raffles/[id]/tickets
+ */
+export async function GET(_req: Request, context: Context) {
   const { id: raw } = await context.params;
   const code = raw.toUpperCase();
 
-  const db = await dbPromise;
-
-  // 1) Cargamos la rifa por UUID o por código
-  const raffleCol = db.collection<RaffleRaw>("raffles");
-  const raffleRaw = await raffleCol.findOne({
+  const db          = await dbPromise;
+  const rafflesCol  = db.collection<RaffleDoc>("raffles");
+  // Primero buscamos la rifa para obtener su verdadero _id
+  const raffle = await rafflesCol.findOne({
     $or: [{ _id: raw }, { code }],
   });
-  if (!raffleRaw) {
-    return NextResponse.json({ message: "Rifa no encontrada" }, { status: 404 });
+  if (!raffle) {
+    return NextResponse.json(
+      { message: `Rifa “${raw}” no encontrada` },
+      { status: 404 }
+    );
   }
 
-  // 2) Convertimos a string el _id si es ObjectId
-  const raffleId =
-    typeof raffleRaw._id === "string"
-      ? raffleRaw._id
-      : raffleRaw._id.toHexString();
-
-  // 3) Obtenemos los tickets, ordenados
-  const col = db.collection<TicketDoc>("tickets");
-  let tickets = await col
-    .find({ raffleId })
+  const ticketsCol = db.collection<TicketDoc>("tickets");
+  let tickets = await ticketsCol
+    .find({ raffleId: raffle._id })
     .sort({ number: 1 })
     .toArray();
 
-  // 4) Si no existían, los inicializamos
   if (tickets.length === 0) {
-    const inicial: TicketDoc[] = Array.from({ length: 100 }, (_, i) => ({
-      _id: crypto.randomUUID(),
-      raffleId,
-      number: String(i).padStart(2, "0"),
-      status: "disponible",
-      pago: false,
-      buyer: "",
+    // Inicializamos 00–99
+    const inicial = Array.from({ length: 100 }, (_, i) => ({
+      _id:           crypto.randomUUID(),
+      raffleId:      raffle._id,
+      number:        String(i).padStart(2, "0"),
+      status:        "disponible" as const,
+      pago:          false,
+      buyer:         "",
       paymentMethod: "",
-      updatedAt: new Date(),
+      updatedAt:     new Date(),
     }));
-    await col.insertMany(inicial);
+    await ticketsCol.insertMany(inicial);
     tickets = inicial;
   }
 
   return NextResponse.json(tickets);
 }
 
-export async function PUT(
-  request: Request,
-  context: Context
-) {
-  // Y aquí también
-  const { id } = await context.params;
-  const data = (await request.json()) as TicketDoc;
+/**
+ * PUT /api/raffles/[id]/tickets
+ */
+export async function PUT(req: Request, context: Context) {
+  const { id: raw } = await context.params;
+  const code = raw.toUpperCase();
 
-  const db = await dbPromise;
-  const col = db.collection<TicketDoc>("tickets");
+  const db          = await dbPromise;
+  const rafflesCol  = db.collection<RaffleDoc>("raffles");
+  // Buscamos la rifa para tener el verdadero _id
+  const raffle = await rafflesCol.findOne({
+    $or: [{ _id: raw }, { code }],
+  });
+  if (!raffle) {
+    return NextResponse.json(
+      { message: `Rifa “${raw}” no encontrada` },
+      { status: 404 }
+    );
+  }
 
-  await col.updateOne(
-    { _id: data._id },
+  // Destructuramos los datos del ticket a actualizar
+  const { _id, status, pago, buyer, paymentMethod } = await req.json();
+
+  const ticketsCol = db.collection<TicketDoc>("tickets");
+  const result = await ticketsCol.updateOne(
+    { _id, raffleId: raffle._id },
     {
       $set: {
-        status: data.status,
-        pago: data.pago,
-        buyer: data.buyer,
-        paymentMethod: data.paymentMethod,
+        status,
+        pago,
+        buyer,
+        paymentMethod,
         updatedAt: new Date(),
       },
     }
   );
 
-  return NextResponse.json({ success: true }, { status: 200 });
+  if (result.matchedCount === 0) {
+    return NextResponse.json(
+      { message: `Ticket no encontrado` },
+      { status: 404 }
+    );
+  }
+
+  // 204 No Content
+  return new NextResponse(null, { status: 204 });
 }

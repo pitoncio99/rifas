@@ -1,68 +1,61 @@
 // File: src/app/api/raffles/[id]/route.ts
+
 import { NextResponse } from "next/server";
-import { dbPromise } from "@/lib/mongodb";
-import type { ObjectId } from "mongodb";
+import { dbPromise }    from "@/lib/mongodb";
 
-type Context = { params: Promise<{ id: string }> };
-
-interface RaffleRaw {
-  _id: string | ObjectId;
-  code: string;
-  title: string;
-  slogan: string;
-  prize: string;
-  price: number;
-  date?: Date;
-  status: "activa" | "inactiva";
+interface RaffleDoc {
+  _id:       string;
+  code:      string;
+  title:     string;
+  slogan:    string;
+  prize:     string;
+  price:     number;
+  date?:     string;
   createdAt: Date;
+  createdBy: string;
 }
 
-// GET /api/raffles/[id]
-export async function GET(
-  _request: Request,
-  context: Context
-) {
+// Context.params es una promesa que hay que awaitear
+type Context = { params: Promise<{ id: string }> };
+
+/**
+ * GET /api/raffles/[id]
+ * Busca una rifa por _id o por code (R1, R2, ...)
+ */
+export async function GET(_req: Request, context: Context) {
   const { id: raw } = await context.params;
   const code = raw.toUpperCase();
 
-  const db = await dbPromise;
-  const col = db.collection<RaffleRaw>("raffles");
+  const db  = await dbPromise;
+  const col = db.collection<RaffleDoc>("raffles");
 
-  const raffleRaw = await col.findOne({
+  const raffle = await col.findOne({
     $or: [{ _id: raw }, { code }],
   });
-  if (!raffleRaw) {
-    return NextResponse.json({ message: "Rifa no encontrada" }, { status: 404 });
+
+  if (!raffle) {
+    return NextResponse.json(
+      { message: `Rifa “${raw}” no encontrada` },
+      { status: 404 }
+    );
   }
 
-  return NextResponse.json({
-    _id: typeof raffleRaw._id === "string"
-      ? raffleRaw._id
-      : raffleRaw._id.toHexString(),
-    code: raffleRaw.code,
-    title: raffleRaw.title,
-    slogan: raffleRaw.slogan,
-    prize: raffleRaw.prize,
-    price: raffleRaw.price,
-    date: raffleRaw.date?.toISOString(),
-    status: raffleRaw.status,
-  });
+  return NextResponse.json(raffle);
 }
 
-// DELETE /api/raffles/[id]
-export async function DELETE(
-  _request: Request,
-  context: Context
-) {
+/**
+ * DELETE /api/raffles/[id]
+ * Elimina la rifa Y TODOS sus tickets
+ */
+export async function DELETE(_req: Request, context: Context) {
   const { id } = await context.params;
+
   const db = await dbPromise;
-
-  // 1) Borrar la rifa
-  await db.collection<RaffleRaw>("raffles").deleteOne({ _id: id });
-
-  // 2) Borrar todos los tickets asociados
+  // 1) Borra la rifa
+  await db.collection("raffles").deleteOne({ _id: id });
+  // 2) Borra todos los tickets relacionados
   await db.collection("tickets").deleteMany({ raffleId: id });
 
-  // 3) Devolver éxito
-  return NextResponse.json({ success: true });
+  // 3) 204 No Content
+  return new NextResponse(null, { status: 204 });
 }

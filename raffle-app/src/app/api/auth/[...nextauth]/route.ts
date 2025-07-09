@@ -1,33 +1,91 @@
-// File: src/app/api/auth/[...nextauth]/route.ts
+// src/app/api/auth/[...nextauth]/route.ts
 
-import NextAuth from "next-auth";
+import NextAuth from "next-auth/next";
 import CredentialsProvider from "next-auth/providers/credentials";
-import type { NextAuthOptions, SessionStrategy } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
+import { dbPromise } from "@/lib/mongodb";
+import { compare } from "bcrypt";
 
 export const authOptions: NextAuthOptions = {
+  // Firma de los JWTs y cookies
+  secret: process.env.NEXTAUTH_SECRET,
+
+  // Usamos JWT en vez de sessions en DB
+  session: { strategy: "jwt" },
+
   providers: [
     CredentialsProvider({
       name: "Credenciales",
       credentials: {
-        username: { label: "Usuario", type: "text", placeholder: "admin" },
-        password: { label: "Contraseña", type: "password" },
+        identifier: {
+          label: "Email o nombre",
+          type: "text",
+          placeholder: "usuario@ejemplo.com o nombre",
+        },
+        password: {
+          label: "Contraseña",
+          type: "password",
+          placeholder: "••••••••",
+        },
       },
       async authorize(credentials) {
-        // Usuario y contraseña guardados en .env.local
-        if (
-          credentials?.username === process.env.ADMIN_USER &&
-          credentials?.password === process.env.ADMIN_PASSWORD
-        ) {
-          return { id: "1", name: "Administrador" };
+        if (!credentials?.identifier || !credentials.password) {
+          return null;
         }
-        return null;
+
+        // Conectamos a MongoDB
+        const db   = await dbPromise;
+        const col  = db.collection<{
+          _id: string;
+          name: string;
+          email: string;
+          password: string;
+          role: "admin" | "user";
+        }>("users");
+
+        // Buscamos usuario por email o por name
+        const user = await col.findOne({
+          $or: [
+            { email: credentials.identifier.toLowerCase() },
+            { name:  credentials.identifier }
+          ]
+        });
+        if (!user) return null;
+
+        // Comparamos la contraseña con el hash en DB
+        const isValid = await compare(credentials.password, user.password);
+        if (!isValid) return null;
+
+        // Lo que terminará en el JWT
+        return {
+          id:   user._id,
+          role: user.role,
+          name: user.name,
+          email: user.email,
+        };
       },
     }),
   ],
-  // Aquí ajustamos el tipo a SessionStrategy
-  session: { strategy: "jwt" as SessionStrategy },
+
+  callbacks: {
+    // Al crear / renovar el JWT
+    async jwt({ token, user }) {
+      if (user) {
+        token.id   = user.id;
+        token.role = (user as any).role;
+      }
+      return token;
+    },
+    // Lo que verá la sesión en el cliente
+    async session({ session, token }) {
+      if (token.id)   session.user.id   = token.id as string;
+      if (token.role) session.user.role = token.role as string;
+      return session;
+    },
+  },
+
   pages: {
-    signIn: "/auth/login",
+    signIn: "/auth/login",  // Ruta de tu formulario de login
   },
 };
 
