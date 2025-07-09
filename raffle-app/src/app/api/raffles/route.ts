@@ -1,8 +1,6 @@
 // File: src/app/api/raffles/route.ts
 import { NextResponse } from "next/server";
-import { dbPromise } from "../../../lib/mongodb";
-import { v4 as uuidv4 } from "uuid";
-import type { OptionalUnlessRequiredId } from "mongodb";
+import { dbPromise } from "@/lib/mongodb";
 
 interface RaffleDoc {
   _id: string;
@@ -11,7 +9,8 @@ interface RaffleDoc {
   slogan: string;
   prize: string;
   price: number;
-  date: Date;       // ← nueva fecha de sorteo
+  date?: Date;
+  status: "activa" | "inactiva";
   createdAt: Date;
 }
 
@@ -19,15 +18,19 @@ export async function GET(request: Request) {
   const db = await dbPromise;
   const col = db.collection<RaffleDoc>("raffles");
 
-  const code = new URL(request.url).searchParams.get("code");
-  if (code) {
-    const raffle = await col.findOne({ code: code.toUpperCase() });
+  const url = new URL(request.url);
+  // Normaliza a mayúsculas si viene ?code=
+  const rawCode = url.searchParams.get("code");
+  if (rawCode) {
+    const code = rawCode.toUpperCase();
+    const raffle = await col.findOne({ code });
     if (!raffle) {
       return NextResponse.json({ message: "No encontrada" }, { status: 404 });
     }
     return NextResponse.json(raffle);
   }
 
+  // Si no hay código en query, devolvemos todas
   const all = await col.find().sort({ createdAt: -1 }).toArray();
   return NextResponse.json(all);
 }
@@ -39,19 +42,19 @@ export async function POST(request: Request) {
 
   const count = await col.countDocuments();
   const code = `R${count + 1}`;
-  const id   = uuidv4();
 
-  const doc: OptionalUnlessRequiredId<RaffleDoc> = {
-    _id: id,
+  const newRaffle: RaffleDoc = {
+    _id: crypto.randomUUID(),
     code,
     title,
     slogan,
     prize,
     price,
-    date: new Date(date),    // ← guardamos la fecha
+    date: date ? new Date(date) : undefined,
+    status: "activa",
     createdAt: new Date(),
   };
 
-  await col.insertOne(doc);
-  return NextResponse.json({ id, code }, { status: 201 });
+  await col.insertOne(newRaffle);
+  return NextResponse.json({ id: newRaffle._id, code }, { status: 201 });
 }

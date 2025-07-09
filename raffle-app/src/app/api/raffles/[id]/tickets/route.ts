@@ -1,13 +1,10 @@
 // File: src/app/api/raffles/[id]/tickets/route.ts
 import { NextResponse } from "next/server";
-import { dbPromise } from "../../../../../lib/mongodb";
-import { v4 as uuidv4 } from "uuid";
-import type { OptionalUnlessRequiredId, WithId } from "mongodb";
+import { dbPromise } from "@/lib/mongodb";
+import type { ObjectId } from "mongodb";
 
-type Context = { params: Promise<{ id: string }> };
-
-interface RaffleDoc {
-  _id: string;
+interface RaffleRaw {
+  _id: string | ObjectId;
   code: string;
 }
 
@@ -18,34 +15,50 @@ interface TicketDoc {
   status: "disponible" | "ocupado";
   pago: boolean;
   buyer: string;
-  paymentMethod: string;  // ← nuevo medio de pago
+  paymentMethod: string;
   updatedAt: Date;
 }
 
-export async function GET(_req: Request, context: Context) {
-  const { id: rawId } = await context.params;
+type Context = {
+  params: Promise<{ id: string }>;
+};
+
+export async function GET(
+  _request: Request,
+  context: Context
+) {
+  // ¡Await aquí!
+  const { id: raw } = await context.params;
+  const code = raw.toUpperCase();
+
   const db = await dbPromise;
 
-  // 1) resolvemos UUID de la rifa
-  const rafflesCol = db.collection<RaffleDoc>("raffles");
-  const raffle = /^R\d+$/i.test(rawId)
-    ? await rafflesCol.findOne({ code: rawId.toUpperCase() })
-    : await rafflesCol.findOne({ _id: rawId });
-  if (!raffle) {
+  // 1) Cargamos la rifa por UUID o por código
+  const raffleCol = db.collection<RaffleRaw>("raffles");
+  const raffleRaw = await raffleCol.findOne({
+    $or: [{ _id: raw }, { code }],
+  });
+  if (!raffleRaw) {
     return NextResponse.json({ message: "Rifa no encontrada" }, { status: 404 });
   }
-  const raffleId = raffle._id;
 
-  // 2) traemos y ordenamos
-  const ticketsCol = db.collection<TicketDoc>("tickets");
-  let tickets = await ticketsCol
+  // 2) Convertimos a string el _id si es ObjectId
+  const raffleId =
+    typeof raffleRaw._id === "string"
+      ? raffleRaw._id
+      : raffleRaw._id.toHexString();
+
+  // 3) Obtenemos los tickets, ordenados
+  const col = db.collection<TicketDoc>("tickets");
+  let tickets = await col
     .find({ raffleId })
     .sort({ number: 1 })
     .toArray();
 
-  // 3) si no existen, sembramos
+  // 4) Si no existían, los inicializamos
   if (tickets.length === 0) {
-    const inicial: Omit<TicketDoc, "_id">[] = Array.from({ length: 100 }, (_, i) => ({
+    const inicial: TicketDoc[] = Array.from({ length: 100 }, (_, i) => ({
+      _id: crypto.randomUUID(),
       raffleId,
       number: String(i).padStart(2, "0"),
       status: "disponible",
@@ -54,45 +67,36 @@ export async function GET(_req: Request, context: Context) {
       paymentMethod: "",
       updatedAt: new Date(),
     }));
-    const docs: OptionalUnlessRequiredId<TicketDoc>[] = inicial.map(t => ({
-      _id: uuidv4(),
-      ...t,
-    }));
-    await ticketsCol.insertMany(docs);
-    tickets = await ticketsCol.find({ raffleId }).sort({ number: 1 }).toArray();
+    await col.insertMany(inicial);
+    tickets = inicial;
   }
 
-  return NextResponse.json(tickets as WithId<TicketDoc>[]);
+  return NextResponse.json(tickets);
 }
 
-export async function PUT(request: Request, context: Context) {
-  const { id: rawId } = await context.params;
-  const { number, status, pago, buyer, paymentMethod } = await request.json();
+export async function PUT(
+  request: Request,
+  context: Context
+) {
+  // Y aquí también
+  const { id } = await context.params;
+  const data = (await request.json()) as TicketDoc;
 
   const db = await dbPromise;
-  const rafflesCol = db.collection<RaffleDoc>("raffles");
-  const raffle = /^R\d+$/i.test(rawId)
-    ? await rafflesCol.findOne({ code: rawId.toUpperCase() })
-    : await rafflesCol.findOne({ _id: rawId });
-  if (!raffle) {
-    return NextResponse.json({ message: "Rifa no encontrada" }, { status: 404 });
-  }
-  const raffleId = raffle._id;
+  const col = db.collection<TicketDoc>("tickets");
 
-  const ticketsCol = db.collection<TicketDoc>("tickets");
-  await ticketsCol.updateOne(
-    { raffleId, number },
+  await col.updateOne(
+    { _id: data._id },
     {
       $set: {
-        status,
-        pago,
-        buyer: buyer ?? "",
-        paymentMethod: paymentMethod ?? "",
+        status: data.status,
+        pago: data.pago,
+        buyer: data.buyer,
+        paymentMethod: data.paymentMethod,
         updatedAt: new Date(),
       },
-    },
-    { upsert: true }
+    }
   );
 
-  return new NextResponse(null, { status: 204 });
+  return NextResponse.json({ success: true }, { status: 200 });
 }
