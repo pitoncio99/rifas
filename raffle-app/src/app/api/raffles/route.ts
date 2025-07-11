@@ -2,9 +2,9 @@
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth"
-import { dbPromise }          from "@/lib/mongodb";
-import { v4 as uuidv4 }       from "uuid";
+import { authOptions } from "@/lib/auth";
+import { dbPromise }  from "@/lib/mongodb";
+import { v4 as uuidv4 } from "uuid";
 
 interface RaffleDoc {
   _id:       string;
@@ -18,6 +18,7 @@ interface RaffleDoc {
   createdBy: string;
 }
 
+// GET /api/raffles?code=...
 export async function GET(request: Request) {
   const session = await getServerSession(authOptions);
   const db      = await dbPromise;
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
   const url   = new URL(request.url);
   const codeQ = url.searchParams.get("code");
 
-  // 1) Si llega ?code=XXX, buscamos UNA SÓLA rifa
+  // Si viene ?code=XXX, devolvemos solo esa rifa
   if (codeQ) {
     const code = codeQ.toUpperCase();
     const raffle = await col.findOne({ code });
@@ -39,20 +40,28 @@ export async function GET(request: Request) {
     return NextResponse.json(raffle);
   }
 
-  // 2) Si no hay código en la query, listamos todas (con filtro por rol)
+  // Si no hay código, listamos todas, pero
+  // si el usuario logueado NO es admin, filtramos por createdBy
   let filter: Partial<RaffleDoc> = {};
-  if (session && session.user.role !== "admin") {
-    filter = { createdBy: session.user.id };
+  const role   = session?.user?.role;
+  const userId = session?.user?.id;
+  if (role !== "admin" && typeof userId === "string") {
+    filter = { createdBy: userId };
   }
 
   const all = await col.find(filter).sort({ createdAt: -1 }).toArray();
   return NextResponse.json(all);
 }
 
+// POST /api/raffles
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const userId  = session?.user?.id;
+  if (!userId) {
+    return NextResponse.json(
+      { error: "No autorizado" },
+      { status: 401 }
+    );
   }
 
   const { title, slogan, prize, price, date } = (await request.json()) as {
@@ -66,7 +75,7 @@ export async function POST(request: Request) {
   const db  = await dbPromise;
   const col = db.collection<RaffleDoc>("raffles");
 
-  // Generar código secuencial R1, R2, …
+  // Creamos un código R1, R2… incrementando según el count
   const count = await col.countDocuments();
   const code  = `R${count + 1}`;
 
@@ -79,8 +88,9 @@ export async function POST(request: Request) {
     price,
     date,
     createdAt:  new Date(),
-    createdBy:  session.user.id,
+    createdBy:  userId,
   };
+
   await col.insertOne(newRaffle);
 
   return NextResponse.json(

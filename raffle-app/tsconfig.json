@@ -20,8 +20,20 @@
     ],
     "paths": {
       "@/*": ["./src/*"]
-    }
+    },
+    // Agrega typeRoots para recoger tus .d.ts
+    "typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ]
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    // Asegúrate de que también incluya tu carpeta de tipos
+    "src/types/**/*.d.ts"
+  ],
   "exclude": ["node_modules"]
 }
