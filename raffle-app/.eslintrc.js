@@ -1,9 +1,18 @@
-module.exports = {
-  extends: ["next/core-web-vitals", "plugin:@typescript-eslint/recommended"],
-  rules: {
-    // ✍️ desactiva la regla de “no-explicit-any”
-    "@typescript-eslint/no-explicit-any": "off",
-    // ✍️ ignora variables que empiecen por guión bajo
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
-  },
-};
+import { FlatCompat } from '@eslint/eslintrc'
+ 
+const compat = new FlatCompat({
+  // import.meta.dirname is available after Node.js v20.11.0
+  baseDirectory: import.meta.dirname,
+})
+ 
+const eslintConfig = [
+  ...compat.config({
+    extends: ['next'],
+    rules: {
+      'react/no-unescaped-entities': 'off',
+      '@next/next/no-page-custom-font': 'off',
+    },
+  }),
+]
+ 
+export default eslintConfig
