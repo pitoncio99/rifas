@@ -1,93 +1,78 @@
-// src/app/api/auth/[...nextauth]/route.ts
+// File: src/app/api/auth/[...nextauth]/route.ts
 
-import NextAuth from "next-auth/next";
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import type { NextAuthOptions } from "next-auth";
-import { dbPromise } from "@/lib/mongodb";
-import { compare } from "bcrypt";
 
+// Configuración de NextAuth
 export const authOptions: NextAuthOptions = {
-  // Firma de los JWTs y cookies
-  secret: process.env.NEXTAUTH_SECRET,
-
-  // Usamos JWT en vez de sessions en DB
-  session: { strategy: "jwt" },
-
   providers: [
     CredentialsProvider({
       name: "Credenciales",
       credentials: {
-        identifier: {
-          label: "Email o nombre",
-          type: "text",
-          placeholder: "usuario@ejemplo.com o nombre",
-        },
-        password: {
-          label: "Contraseña",
-          type: "password",
-          placeholder: "••••••••",
-        },
+        username: { label: "Usuario", type: "text", placeholder: "tú@email" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.identifier || !credentials.password) {
-          return null;
-        }
+        if (!credentials) return null;
+        // Aquí buscas en tu BD al usuario por email (o username)
+        const db = await (await import("@/lib/mongodb")).dbPromise;
+        const user = await db
+          .collection("users")
+          .findOne({ email: credentials.username });
 
-        // Conectamos a MongoDB
-        const db   = await dbPromise;
-        const col  = db.collection<{
-          _id: string;
-          name: string;
-          email: string;
-          password: string;
-          role: "admin" | "user";
-        }>("users");
-
-        // Buscamos usuario por email o por name
-        const user = await col.findOne({
-          $or: [
-            { email: credentials.identifier.toLowerCase() },
-            { name:  credentials.identifier }
-          ]
-        });
         if (!user) return null;
-
-        // Comparamos la contraseña con el hash en DB
-        const isValid = await compare(credentials.password, user.password);
+        // Verifica la contraseña
+        const isValid = await (await import("bcrypt")).compare(
+          credentials.password,
+          user.password
+        );
         if (!isValid) return null;
 
-        // Lo que terminará en el JWT
+        // Devuelve la info que quieras exponer en session.user
         return {
-          id:   user._id,
-          role: user.role,
+          id: user._id,
           name: user.name,
           email: user.email,
+          role: user.role,
         };
       },
     }),
   ],
 
-  callbacks: {
-    // Al crear / renovar el JWT
-    async jwt({ token, user }) {
-      if (user) {
-        token.id   = user.id;
-        token.role = (user as any).role;
-      }
-      return token;
-    },
-    // Lo que verá la sesión en el cliente
-    async session({ session, token }) {
-      if (token.id)   session.user.id   = token.id as string;
-      if (token.role) session.user.role = token.role as string;
-      return session;
-    },
+  session: {
+    strategy: "jwt",
   },
 
   pages: {
-    signIn: "/auth/login",  // Ruta de tu formulario de login
+    signIn: "/auth/login",
+  },
+
+  callbacks: {
+    async jwt({ token, user }) {
+      // La primera vez que se emite el JWT, user existirá
+      if (user) {
+        token.role = (user as any).role;
+        token.id = (user as any).id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (token) {
+        session.user = {
+          id: token.id as string,
+          name: session.user?.name!,
+          email: session.user?.email!,
+          role: token.role as "admin" | "user",
+        };
+      }
+      return session;
+    },
   },
 };
 
+// NextAuth genera internamente handlers para GET y POST
 const handler = NextAuth(authOptions);
+
+// Debes exportarlos así para que Next.js los reconozca como rutas App Router
 export { handler as GET, handler as POST };
