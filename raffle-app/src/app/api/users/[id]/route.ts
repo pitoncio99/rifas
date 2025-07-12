@@ -1,10 +1,19 @@
 // File: src/app/api/users/[id]/route.ts
 
 import { NextResponse } from "next/server";
-import { dbPromise } from "../../../../lib/mongodb";
+import { dbPromise }   from "@/lib/mongodb";
 
+interface UserDoc {
+  _id:       string;   // ahora esperamos UUID/string
+  name:      string;
+  email:     string;
+  role:      "admin" | "user";
+  password:  string;
+  createdAt: Date;
+}
+
+// Context.params es una promesa que hay que awaitear
 type Context = {
-  // Next.js pasa `params` como una promesa en rutas dinámicas
   params: Promise<{ id: string }>;
 };
 
@@ -12,14 +21,15 @@ export async function DELETE(
   _request: Request,
   context: Context
 ) {
-  // 1) awaitea params antes de desestructurar
+  // 1) Espera la promesa de params
   const { id } = await context.params;
-  const db = await dbPromise;
+  const db     = await dbPromise;
 
-  // 2) borra el usuario por _id (que aquí es un string, idealmente UUID)
-  const result = await db
-    .collection("users")
-    .deleteOne({ _id: id });
+  // 2) Especifica el genérico <UserDoc> para que _id sea string
+  const col = db.collection<UserDoc>("users");
+
+  // 3) Borra el usuario por _id:string
+  const result = await col.deleteOne({ _id: id });
 
   if (result.deletedCount === 0) {
     return NextResponse.json(
@@ -28,6 +38,6 @@ export async function DELETE(
     );
   }
 
-  // 3) HTTP 204 No Content sin body
+  // 4) 204 No Content
   return new NextResponse(null, { status: 204 });
 }

@@ -1,4 +1,6 @@
+// File: src/app/auth/login/page.tsx
 "use client";
+
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
@@ -6,8 +8,8 @@ import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const [identifier, setIdentifier] = useState("");
-  const [password,   setPassword]   = useState("");
-  const [error,      setError]      = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -24,7 +26,7 @@ export default function LoginPage() {
     if (res?.error) {
       setError("Credenciales inválidas");
     } else {
-      // Redirigimos al panel (o a donde prefieras)
+      // Redirigimos al panel de admin tras login exitoso
       router.push("/admin");
     }
   };
@@ -47,15 +49,19 @@ export default function LoginPage() {
 
         <div className="mb-4">
           <label className="block text-gray-800 mb-1">
-            Email o Nombre
+            Email o Nombre de usuario
           </label>
           <input
             name="identifier"
             type="text"
-            placeholder="usuario@ejemplo.com o nombre"
+            placeholder="usuario@ejemplo.com"
             value={identifier}
             onChange={(e) => setIdentifier(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="
+              w-full px-4 py-2 bg-gray-50 border border-gray-300
+              text-gray-900 placeholder-gray-400 rounded
+              focus:outline-none focus:ring-2 focus:ring-blue-500
+            "
             required
           />
         </div>
@@ -70,14 +76,21 @@ export default function LoginPage() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 bg-gray-50 border border-gray-300 text-gray-900 placeholder-gray-400 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="
+              w-full px-4 py-2 bg-gray-50 border border-gray-300
+              text-gray-900 placeholder-gray-400 rounded
+              focus:outline-none focus:ring-2 focus:ring-blue-500
+            "
             required
           />
         </div>
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white py-3 rounded hover:bg-blue-700 transition"
+          className="
+            w-full bg-blue-600 text-white py-3 rounded
+            hover:bg-blue-700 transition-colors duration-200
+          "
         >
           Entrar
         </button>

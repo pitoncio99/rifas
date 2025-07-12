@@ -2,7 +2,7 @@
 import { getServerSession } from "next-auth/next";
 import { redirect }         from "next/navigation";
 import Link                 from "next/link";
-import { authOptions }      from "../api/auth/[...nextauth]/route";
+import { authOptions } from "@/lib/auth"
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // 1) Obtenemos la sesión
