@@ -9,30 +9,31 @@ export const authOptions: NextAuthOptions = {
     CredentialsProvider({
       name: "Credenciales",
       credentials: {
-        username: { label: "Email", type: "text" },
-        password: { label: "Contraseña", type: "password" },
+        // 🔑 aquí lo llamamos 'identifier'
+        identifier: { label: "Email", type: "text", placeholder: "tu@correo.com" },
+        password:   { label: "Contraseña", type: "password" },
       },
-      // 👇 Firma correcta: recibe credentials y req (aunque no uses req, debe estar)
+      // Firma correcta: (credentials, req)
       async authorize(credentials, req) {
+        console.log("→ authorize credentials:", credentials);
         if (!credentials) return null;
-        const db = await dbPromise;
-        const user = await db
-          .collection("users")
-          .findOne({ email: credentials.username });
+        // cogemos el email de 'identifier'
+        const email = credentials.identifier;
+        const db    = await dbPromise;
+        const user  = await db.collection("users").findOne({ email });
+        console.log("→ usuario encontrado:", user);
         if (!user) return null;
 
-        const valid = await bcrypt.compare(
-          credentials.password,
-          user.password
-        );
+        const valid = await bcrypt.compare(credentials.password, user.password);
+        console.log("→ contraseña válida:", valid);
         if (!valid) return null;
 
-        // 👇 Convierte ObjectId a string
+        // NextAuth exige que id sea string
         return {
-          id:   user._id.toString(),
-          name: user.name,
-          email:user.email,
-          role: user.role,
+          id:           String(user._id),
+          name:         user.name,
+          email:        user.email,
+          role:         user.role,
         };
       },
     }),
@@ -40,25 +41,24 @@ export const authOptions: NextAuthOptions = {
 
   session: { strategy: "jwt" },
   pages:   { signIn: "/auth/login" },
-
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
         token.id   = user.id;
-        token.role = (user as any).role;
+        token.role = user.role;
       }
       return token;
     },
     async session({ session, token }) {
-      if (token) {
-        session.user = {
-          id:    token.id as string,
-          name:  session.user?.name!,
-          email: session.user?.email!,
-          role:  token.role as "admin" | "user",
-        };
-      }
+      session.user = {
+        ...session.user!,
+        id:   token.id   as string,
+        role: token.role as "admin" | "user",
+      };
       return session;
     },
   },
+
+  // asegúrate de tener esto en tu env:
+  secret: process.env.NEXTAUTH_SECRET,
 };
