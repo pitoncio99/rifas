@@ -55,8 +55,16 @@ export default function RaffleGrid({ raffleId }: { raffleId: string }) {
     return "bg-green-300 hover:bg-green-400";
   };
   const fechaText = raffle.date
-    ? new Date(raffle.date).toLocaleDateString()
-    : "—";
+  ? new Date(`${raffle.date}T12:00:00Z`).toLocaleDateString("es-CL", {
+      day: "numeric",
+      month: "numeric",
+      year: "numeric",
+    })
+  : "";
+  const disponibles = tickets?.filter((t) => t.status === "disponible").length ?? 0;
+  const reservados = tickets?.filter((t) => t.status === "ocupado" && !t.pago).length ?? 0;
+  const ocupados = tickets?.filter((t) => t.status === "ocupado" && t.pago).length ?? 0;
+
 
   return (
     <div className="px-4 py-6">
@@ -104,19 +112,23 @@ export default function RaffleGrid({ raffleId }: { raffleId: string }) {
           <h2 className="text-lg font-semibold text-gray-800 mb-2">Leyenda:</h2>
           <div className="flex flex-col sm:flex-row sm:space-x-6 space-y-2 sm:space-y-0 text-gray-800 text-sm">
             <div className="flex items-center">
+              <span className="mr-1">{disponibles}</span>
               <div className="w-4 h-4 border-2 border-gray-500 bg-white mr-2" />
               <span>Disponible</span>
             </div>
             <div className="flex items-center">
+              <span className="mr-1">{reservados}</span>
               <div className="w-4 h-4 bg-yellow-300 mr-2" />
               <span>Reservado (no pagado)</span>
             </div>
             <div className="flex items-center">
+              <span className="mr-1">{ocupados}</span>
               <div className="w-4 h-4 bg-green-300 mr-2" />
               <span>Ocupado (pagado)</span>
             </div>
           </div>
         </div>
+
 
         {/* Grilla de números */}
         <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
@@ -166,9 +178,16 @@ export default function RaffleGrid({ raffleId }: { raffleId: string }) {
                 <p className="text-lg text-gray-800 mb-1">
                   Método: {selected.paymentMethod || "—"}
                 </p>
-                <p className="text-sm text-gray-600">
-                  Actualizado: {new Date(selected.updatedAt).toLocaleString()}
-                </p>
+                  <p className="text-sm text-gray-600">
+                    Actualizado: {new Date(selected.updatedAt).toLocaleString("es-CL", {
+                      day: "numeric",
+                      month: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </p>
+
               </>
             )}
 
