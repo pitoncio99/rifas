@@ -183,8 +183,6 @@ export default function RaffleGrid({ raffleId }: { raffleId: string }) {
                       day: "numeric",
                       month: "numeric",
                       year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
                     })}
                   </p>
 
