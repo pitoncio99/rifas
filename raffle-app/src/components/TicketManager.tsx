@@ -44,8 +44,13 @@ export default function TicketManager() {
         setRaffle({
           ...dataR,
           date: dataR.date
-            ? new Date(dataR.date).toLocaleDateString()
+            ? new Date(`${dataR.date}T12:00:00Z`).toLocaleDateString("es-CL", {
+              day: "numeric",
+              month: "numeric",
+              year: "numeric",
+            })
             : undefined,
+
         });
       }
       // 2) Tickets
