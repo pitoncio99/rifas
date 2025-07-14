@@ -9,7 +9,7 @@ export default async function AdminPage() {
         href="/admin/raffles"
         className="inline-block bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
       >
-        Ver galerío de rifas
+        Ver galeria de rifas
       </Link>
     </div>
   );

@@ -49,7 +49,15 @@ export default function TicketManager() {
   const [bulkBuyer, setBulkBuyer] = useState("");
   const [bulkStatus, setBulkStatus] = useState<"ocupado" | "disponible">("ocupado");
   const [bulkPago, setBulkPago] = useState(true);
-  const [bulkMetodo, setBulkMetodo] = useState<"Transferencia" | "Efectivo">("Transferencia");
+  // ahora puede ser vacío si no está pagado
+  const [bulkMetodo, setBulkMetodo] = useState<"" | "Transferencia" | "Efectivo">("");
+
+  // reset de método de pago si desmarcan "Pagado"
+  useEffect(() => {
+    if (!bulkPago) {
+      setBulkMetodo("");
+    }
+  }, [bulkPago]);
 
   // Asignación aleatoria
   const [showRandomModal, setShowRandomModal] = useState(false);
@@ -60,11 +68,11 @@ export default function TicketManager() {
   const [randomPago, setRandomPago] = useState(true);
   const [randomMetodo, setRandomMetodo] = useState<"Transferencia" | "Efectivo">("Transferencia");
 
-  // Pago inline en "no pagados"
+  // Inline pay en "no pagados"
   const [payingId, setPayingId] = useState<string | null>(null);
   const [payMethodLocal, setPayMethodLocal] = useState<"Transferencia" | "Efectivo">("Transferencia");
 
-  // Carga inicial de rifa y tickets
+  // carga inicial
   useEffect(() => {
     if (!id) return;
     async function loadAll() {
@@ -78,7 +86,7 @@ export default function TicketManager() {
     loadAll();
   }, [id]);
 
-  // Datos para el gráfico (Efectivo, Transferencia, No pagados)
+  // gráficos de pago
   const chartData = (() => {
     const price = raffle?.price || 0;
     const efectivoCount = tickets.filter(
@@ -97,16 +105,16 @@ export default function TicketManager() {
     ];
   })();
 
-  // Formateo de fecha para evitar mismatch SSR/cliente
+  // evitar mismatch SSR/cliente
   const formattedDate = raffle?.date
     ? new Date(`${raffle.date}T12:00:00Z`).toLocaleDateString("es-CL", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      })
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
     : "—";
 
-  // Edición individual
+  // edición individual
   const onFieldChange = (
     ticketId: string,
     field: keyof Omit<Ticket, "_id" | "number">,
@@ -137,11 +145,13 @@ export default function TicketManager() {
     });
     setTickets((prev) => prev.map((t) => (t._id === ticketId ? updated : t)));
     setEdited((prev) => {
-      const c = { ...prev }; delete c[ticketId]; return c;
+      const c = { ...prev };
+      delete c[ticketId];
+      return c;
     });
   };
 
-  // Edición masiva
+  // edición masiva
   const handleBulkSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     await fetch("/api/raffles/bulk-update", {
@@ -158,29 +168,27 @@ export default function TicketManager() {
         },
       }),
     });
-
-    // Actualizo localmente la tabla
+    // update local
     setTickets((prev) =>
       prev.map((t) =>
         selected.includes(t.number)
           ? {
-              ...t,
-              status: bulkStatus,
-              buyer: bulkBuyer,
-              pago: bulkPago,
-              paymentMethod: bulkMetodo,
-            }
+            ...t,
+            status: bulkStatus,
+            buyer: bulkBuyer,
+            pago: bulkPago,
+            paymentMethod: bulkMetodo,
+          }
           : t
       )
     );
-
     setSuccessMsg(`✅ ${selected.length} números asignados.`);
     setTimeout(() => setSuccessMsg(""), 4000);
     setSelected([]);
     setBulkBuyer("");
   };
 
-  // Asignación aleatoria
+  // random assign
   const handleRandomStart = () => {
     setRandomStep("cantidad");
     setRandomAmount(1);
@@ -193,12 +201,12 @@ export default function TicketManager() {
       alert("No hay suficientes números disponibles.");
       return;
     }
-    const seleccion: string[] = [];
-    while (seleccion.length < randomAmount) {
+    const sel: string[] = [];
+    while (sel.length < randomAmount) {
       const n = disponibles[Math.floor(Math.random() * disponibles.length)];
-      if (!seleccion.includes(n)) seleccion.push(n);
+      if (!sel.includes(n)) sel.push(n);
     }
-    setRandomSelection(seleccion);
+    setRandomSelection(sel);
     setRandomBuyer("");
     setRandomPago(true);
     setRandomMetodo("Transferencia");
@@ -238,7 +246,7 @@ export default function TicketManager() {
     if (!randomPago) setRandomMetodo("Transferencia");
   }, [randomPago]);
 
-  // Confirmar pago individual desde "no pagados"
+  // inline pay confirm
   const handleConfirmPay = async (ticketId: string) => {
     const tkt = tickets.find((t) => t._id === ticketId);
     if (!tkt) return;
@@ -267,9 +275,11 @@ export default function TicketManager() {
   if (loading) return <p className="p-4 text-gray-800">Cargando datos…</p>;
   if (!raffle) return <p className="p-4 text-red-600">Rifa no encontrada</p>;
 
+  // sólo deudores
+  const debtors = tickets.filter(t => t.status === "ocupado" && !t.pago);
+
   return (
     <div className="space-y-6">
-
       {/* Detalles de la rifa */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h1 className="text-4xl font-extrabold text-gray-900 mb-2">{raffle.title}</h1>
@@ -316,14 +326,9 @@ export default function TicketManager() {
         </div>
       </div>
 
-      {/* Mensaje de éxito */}
-      {successMsg && (
-        <div className="bg-green-100 text-green-800 px-4 py-2 rounded border border-green-300">
-          {successMsg}
-        </div>
-      )}
 
-      {/* Botón de asignación aleatoria */}
+
+      {/* Random assign */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-semibold text-gray-900">Gestión de Números</h2>
         <button
@@ -378,7 +383,7 @@ export default function TicketManager() {
                 <input
                   type="checkbox"
                   checked={randomPago}
-                  onChange={(e) => setRandomPago(e.target.checked)}  
+                  onChange={(e) => setRandomPago(e.target.checked)}
                 />
                 Pagado
               </label>
@@ -410,7 +415,7 @@ export default function TicketManager() {
         </div>
       )}
 
-      {/* Formulario de edición masiva */}
+      {/* Edición masiva */}
       {selected.length > 0 && (
         <form
           onSubmit={handleBulkSubmit}
@@ -423,12 +428,12 @@ export default function TicketManager() {
             <input
               placeholder="Comprador"
               value={bulkBuyer}
-              onChange={(e) => setBulkBuyer(e.target.value)}
+              onChange={e => setBulkBuyer(e.target.value)}
               className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded"
             />
             <select
               value={bulkStatus}
-              onChange={(e) => setBulkStatus(e.target.value as any)}
+              onChange={e => setBulkStatus(e.target.value as any)}
               className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded"
             >
               <option value="ocupado">Ocupado</option>
@@ -438,16 +443,17 @@ export default function TicketManager() {
               <input
                 type="checkbox"
                 checked={bulkPago}
-                onChange={(e) => setBulkPago(e.target.checked)}
+                onChange={e => setBulkPago(e.target.checked)}
               />
               Pagado
             </label>
             <select
               value={bulkMetodo}
-              onChange={(e) => setBulkMetodo(e.target.value as any)}
+              onChange={e => setBulkMetodo(e.target.value as any)}
               disabled={!bulkPago}
               className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
             >
+              <option value="">— selecciona —</option>
               <option value="Transferencia">Transferencia</option>
               <option value="Efectivo">Efectivo</option>
             </select>
@@ -461,7 +467,7 @@ export default function TicketManager() {
         </form>
       )}
 
-      {/* Tabla de tickets */}
+      {/* Tabla de tickets (idéntica al anterior) */}
       <div className="overflow-x-auto bg-gray-100 p-4 rounded-lg">
         <table className="min-w-full bg-white rounded-lg shadow">
           <thead className="bg-gray-200">
@@ -491,9 +497,7 @@ export default function TicketManager() {
                       checked={isSelected}
                       onChange={() =>
                         setSelected((prev) =>
-                          isSelected
-                            ? prev.filter((n) => n !== t.number)
-                            : [...prev, t.number]
+                          isSelected ? prev.filter((n) => n !== t.number) : [...prev, t.number]
                         )
                       }
                     />
@@ -503,11 +507,7 @@ export default function TicketManager() {
                     <select
                       value={current.status}
                       onChange={(e) =>
-                        onFieldChange(
-                          t._id,
-                          "status",
-                          e.target.value as Ticket["status"]
-                        )
+                        onFieldChange(t._id, "status", e.target.value as Ticket["status"])
                       }
                       className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded"
                     >
@@ -520,9 +520,7 @@ export default function TicketManager() {
                       type="text"
                       value={current.buyer}
                       disabled={isAvailable}
-                      onChange={(e) =>
-                        onFieldChange(t._id, "buyer", e.target.value)
-                      }
+                      onChange={(e) => onFieldChange(t._id, "buyer", e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded disabled:opacity-50"
                     />
                   </td>
@@ -531,9 +529,7 @@ export default function TicketManager() {
                       type="checkbox"
                       checked={current.pago}
                       disabled={isAvailable}
-                      onChange={(e) =>
-                        onFieldChange(t._id, "pago", e.target.checked)
-                      }
+                      onChange={(e) => onFieldChange(t._id, "pago", e.target.checked)}
                       className="accent-blue-600 disabled:opacity-50"
                     />
                   </td>
@@ -541,13 +537,7 @@ export default function TicketManager() {
                     <select
                       value={current.paymentMethod}
                       disabled={isAvailable || !isPaid}
-                      onChange={(e) =>
-                        onFieldChange(
-                          t._id,
-                          "paymentMethod",
-                          e.target.value
-                        )
-                      }
+                      onChange={(e) => onFieldChange(t._id, "paymentMethod", e.target.value)}
                       className="w-full bg-gray-50 border border-gray-300 text-gray-900 px-2 py-1 rounded disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                     >
                       <option value="">— selecciona —</option>
@@ -559,11 +549,10 @@ export default function TicketManager() {
                     <button
                       onClick={() => handleSave(t._id)}
                       disabled={!pending}
-                      className={`px-3 py-1 rounded text-sm ${
-                        pending
-                          ? "bg-green-600 text-white hover:bg-green-700"
-                          : "bg-gray-300 text-gray-600 cursor-not-allowed"
-                      }`}
+                      className={`px-3 py-1 rounded text-sm ${pending
+                        ? "bg-green-600 text-white hover:bg-green-700"
+                        : "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        }`}
                     >
                       Guardar
                     </button>
@@ -575,27 +564,27 @@ export default function TicketManager() {
         </table>
       </div>
 
-      {/* Listado de números no pagados con opción de marcar pago */}
-      <div className="mt-6 bg-red-50 border border-red-300 p-4 rounded-lg">
-        <h3 className="text-lg font-semibold text-red-800 mb-2">
-          Números no pagados
-        </h3>
-        <ul className="list-disc list-inside text-gray-800 space-y-2">
-          {tickets
-            .filter((t) => t.status === "ocupado" && !t.pago)
-            .map((t) => (
-              <li key={t._id} className="flex items-center justify-between">
+      {/* Éxito */}
+      {successMsg && (
+        <div className="bg-green-100 text-green-800 px-4 py-2 rounded border border-green-300">
+          {successMsg}
+        </div>
+      )}
+      {/* Listado de números no pagados */}
+      {debtors.length > 0 && (
+        <div className="mt-6 bg-red-50 border border-red-300 p-4 rounded-lg max-w-lg mx-auto">
+          <h3 className="text-lg font-semibold text-red-800 mb-2">Números no pagados</h3>
+          <ul className="divide-y divide-red-200 text-gray-800">
+            {debtors.map(t => (
+              <li key={t._id} className="flex items-center justify-between py-2">
                 <span>
                   <strong>#{t.number}</strong> — {t.buyer || "Sin comprador"}
                 </span>
-
                 {payingId === t._id ? (
                   <div className="flex items-center gap-2">
                     <select
                       value={payMethodLocal}
-                      onChange={(e) =>
-                        setPayMethodLocal(e.target.value as any)
-                      }
+                      onChange={e => setPayMethodLocal(e.target.value as any)}
                       className="bg-gray-50 border border-gray-300 rounded px-2 py-1 text-sm"
                     >
                       <option value="Transferencia">Transferencia</option>
@@ -627,8 +616,9 @@ export default function TicketManager() {
                 )}
               </li>
             ))}
-        </ul>
-      </div>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
